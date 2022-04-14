@@ -2,11 +2,13 @@ from turtle import forward
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from timm.models.layers import trunc_normal_, DropPath
 
 # channel wise attention
 class CA_layer(nn.Module):
     def __init__(self, channel, reduction=16):
         super(CA_layer, self).__init__()
+        # super().__init__()
         # global average pooling
         self.gap = nn.AdaptiveAvgPool2d(1)
         self.fc = nn.Sequential(
@@ -22,20 +24,14 @@ class CA_layer(nn.Module):
         y = self.fc(self.gap(x))
         return x*y.expand_as(x)
 
-class channel_pooling(nn.Module):
-    def forward(self,x):
-        max_res = torch.mean(x, dim=1, keepdim=True)
-        avg_res = torch.mean(x, dim=1, keepdim=True)
-        return torch.cat((max_res, avg_res), dim=1)
-
 class gcc_Block(nn.Module):
     def __init__(self,
         dim,
         drop_path=0.,
         layer_scale_init_value=1e-6,
         # gcc options
-        meta_kernel_size=32,
-        instance_kernel_method='crop', # YangTao: only 'interpolation_bilinear' mode now
+        meta_kernel_size=16,
+        instance_kernel_method=None,
         use_pe=True,
         mid_mix=True,
         bias=True,
@@ -44,6 +40,7 @@ class gcc_Block(nn.Module):
         dropout=0.1
         ):
         super(gcc_Block, self).__init__()
+        # super().__init__()
         
         # record options
         self.dim = dim
@@ -84,30 +81,34 @@ class gcc_Block(nn.Module):
         self.ca = CA_layer(channel=2*dim)
 
     def get_instance_kernel(self, instance_kernel_size):
-        # YangTao: only 'interpolation_bilinear' mode now
-        H_shape = [instance_kernel_size, 1]
-        W_shape = [1, instance_kernel_size]
-        return  F.interpolate(self.meta_kernel_1_H, H_shape, mode='bilinear', align_corners=True), \
-                F.interpolate(self.meta_kernel_1_W, W_shape, mode='bilinear', align_corners=True), \
-                F.interpolate(self.meta_kernel_2_H, H_shape, mode='bilinear', align_corners=True), \
-                F.interpolate(self.meta_kernel_2_W, W_shape, mode='bilinear', align_corners=True),
+        # if no use of dynamic resolution, keep a static kernel
+        if self.instance_kernel_method is None:
+            return  self.meta_kernel_1_H, self.meta_kernel_1_W, self.meta_kernel_2_H, self.meta_kernel_2_W
+        elif self.instance_kernel_method == 'interpolation_bilinear':
+            H_shape, W_shape = [instance_kernel_size, 1], [1, instance_kernel_size]
+            return  F.interpolate(self.meta_kernel_1_H, H_shape, mode='bilinear', align_corners=True), \
+                    F.interpolate(self.meta_kernel_1_W, W_shape, mode='bilinear', align_corners=True), \
+                    F.interpolate(self.meta_kernel_2_H, H_shape, mode='bilinear', align_corners=True), \
+                    F.interpolate(self.meta_kernel_2_W, W_shape, mode='bilinear', align_corners=True),
 
     def get_instance_pe(self, instance_kernel_size):
-        # YangTao: only 'interpolation_bilinear' mode now
-        return  F.interpolate(self.meta_pe_1_H, [instance_kernel_size, 1], mode='bilinear', align_corners=True)\
-                    .expand(1, self.dim, instance_kernel_size, instance_kernel_size), \
-                F.interpolate(self.meta_pe_1_W, [1, instance_kernel_size], mode='bilinear', align_corners=True)\
-                    .expand(1, self.dim, instance_kernel_size, instance_kernel_size), \
-                F.interpolate(self.meta_pe_2_H, [instance_kernel_size, 1], mode='bilinear', align_corners=True)\
-                    .expand(1, self.dim, instance_kernel_size, instance_kernel_size), \
-                F.interpolate(self.meta_pe_2_W, [1, instance_kernel_size], mode='bilinear', align_corners=True)\
-                    .expand(1, self.dim, instance_kernel_size, instance_kernel_size)
+        if self.instance_kernel_method is None:
+            return  self.meta_pe_1_H, self.meta_pe_1_W, self.meta_pe_2_H, self.meta_pe_2_W
+        elif self.instance_kernel_method == 'interpolation_bilinear':
+            return  F.interpolate(self.meta_pe_1_H, [instance_kernel_size, 1], mode='bilinear', align_corners=True)\
+                        .expand(1, self.dim, instance_kernel_size, instance_kernel_size), \
+                    F.interpolate(self.meta_pe_1_W, [1, instance_kernel_size], mode='bilinear', align_corners=True)\
+                        .expand(1, self.dim, instance_kernel_size, instance_kernel_size), \
+                    F.interpolate(self.meta_pe_2_H, [instance_kernel_size, 1], mode='bilinear', align_corners=True)\
+                        .expand(1, self.dim, instance_kernel_size, instance_kernel_size), \
+                    F.interpolate(self.meta_pe_2_W, [1, instance_kernel_size], mode='bilinear', align_corners=True)\
+                        .expand(1, self.dim, instance_kernel_size, instance_kernel_size)
 
     def forward(self, x):
         x_1, x_2 = torch.chunk(x, 2, 1)
         x_1_res, x_2_res = x_1, x_2
-        _, _, f_s, _ = x_1.shape
 
+        _, _, f_s, _ = x_1.shape
         K_1_H, K_1_W, K_2_H, K_2_W = self.get_instance_kernel(f_s)
         if self.use_pe:
             pe_1_H, pe_1_W, pe_2_H, pe_2_W = self.get_instance_pe(f_s)
@@ -146,18 +147,9 @@ class gcc_Block(nn.Module):
         return x_ffn
 
 class Block(nn.Module):
-    r""" ConvNeXt Block. There are two equivalent implementations:
-    (1) DwConv -> LayerNorm (channels_first) -> 1x1 Conv -> GELU -> 1x1 Conv; all in (N, C, H, W)
-    (2) DwConv -> Permute to (N, H, W, C); LayerNorm (channels_last) -> Linear -> GELU -> Linear; Permute back
-    We use (2) as we find it slightly faster in PyTorch
-    
-    Args:
-        dim (int): Number of input channels.
-        drop_path (float): Stochastic depth rate. Default: 0.0
-        layer_scale_init_value (float): Init value for Layer Scale. Default: 1e-6.
-    """
     def __init__(self, dim, drop_path=0., layer_scale_init_value=1e-6):
-        super().__init__()
+        super(Block, self).__init__()
+        # super().__init__()
         self.dwconv = nn.Conv2d(dim, dim, kernel_size=7, padding=3, groups=dim) # depthwise conv
         self.norm = LayerNorm(dim, eps=1e-6)
         self.pwconv1 = nn.Linear(dim, 4 * dim) # pointwise/1x1 convs, implemented with linear layers
@@ -181,3 +173,24 @@ class Block(nn.Module):
 
         x = input + self.drop_path(x)
         return x
+
+class LayerNorm(nn.Module):
+    def __init__(self, normalized_shape, eps=1e-6, data_format="channels_last"):
+        super(LayerNorm, self).__init__()
+        self.weight = nn.Parameter(torch.ones(normalized_shape))
+        self.bias = nn.Parameter(torch.zeros(normalized_shape))
+        self.eps = eps
+        self.data_format = data_format
+        if self.data_format not in ["channels_last", "channels_first"]:
+            raise NotImplementedError 
+        self.normalized_shape = (normalized_shape, )
+    
+    def forward(self, x):
+        if self.data_format == "channels_last":
+            return F.layer_norm(x, self.normalized_shape, self.weight, self.bias, self.eps)
+        elif self.data_format == "channels_first":
+            u = x.mean(1, keepdim=True)
+            s = (x - u).pow(2).mean(1, keepdim=True)
+            x = (x - u) / torch.sqrt(s + self.eps)
+            x = self.weight[:, None, None] * x + self.bias[:, None, None]
+            return x

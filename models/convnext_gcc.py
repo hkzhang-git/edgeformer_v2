@@ -4,15 +4,16 @@ import torch.nn.functional as F
 from timm.models.layers import trunc_normal_, DropPath
 from timm.models.registry import register_model
 
-from convnext import Block
-from gcc_modules import gcc_Block
+# from .convnext import Block, LayerNorm
+from .gcc_modules import gcc_Block, Block, LayerNorm
 
 class ConvNeXt_gcc(nn.Module):
     def __init__(self, in_chans=3, num_classes=1000, 
                  depths=[3, 3, 9, 3], dims=[96, 192, 384, 768], drop_path_rate=0., 
                  layer_scale_init_value=1e-6, head_init_scale=1.,
                  ):
-        super().__init__()
+        # super().__init__()
+        super(ConvNeXt_gcc, self).__init__()
 
         self.downsample_layers = nn.ModuleList() # stem and 3 intermediate downsampling conv layers
         stem = nn.Sequential(
@@ -37,10 +38,15 @@ class ConvNeXt_gcc(nn.Module):
                     for j in range(depths[i])
                 ])
             else:       # for stage 2 and 3, gcc modules is used
+                stages_fs = [None, None, 14, 7]
                 stage = nn.Sequential(*[
+                    gcc_Block(dim=dims[i]//2, drop_path=dp_rates[cur + j], layer_scale_init_value=layer_scale_init_value, 
+                        # instance_kernel_method='interpolation_bilinear', meta_kernel_size=16,
+                        instance_kernel_method=None, meta_kernel_size=stages_fs[i], # using static global kernel
+                        use_pe=True, mid_mix=False, bias=True, ffn_dim=dims[i], ffn_dropout=0.0, dropout=0.1)
+                    # if depths[i]//3 < j+1 <= 2*depths[i]//3 else \
+                    if 2*depths[i]//3 < j+1 else \
                     Block(dim=dims[i], drop_path=dp_rates[cur + j], layer_scale_init_value=layer_scale_init_value) \
-                    if j+1>(depths[i]-depths[i]//3) else \
-                    gcc_Block(dim=dims[i], drop_path=dp_rates[cur + j], layer_scale_init_value=layer_scale_init_value) \
                     for j in range(depths[i]) # here we use gcc in the last 1/3 blocks
                 ])                            # e.g., j+1=7 > 9-9//3=6, so block 678 is gcc_block, where block 0~5 is normal
             self.stages.append(stage)
@@ -49,7 +55,7 @@ class ConvNeXt_gcc(nn.Module):
         self.norm = nn.LayerNorm(dims[-1], eps=1e-6) # final norm layer
         self.head = nn.Linear(dims[-1], num_classes)
 
-        self.apply(self._init_weights)
+        # self.apply(self._init_weights)
         self.head.weight.data.mul_(head_init_scale)
         self.head.bias.data.mul_(head_init_scale)
 
@@ -68,32 +74,6 @@ class ConvNeXt_gcc(nn.Module):
         x = self.forward_features(x)
         x = self.head(x)
         return x
-
-class LayerNorm(nn.Module):
-    r""" LayerNorm that supports two data formats: channels_last (default) or channels_first. 
-    The ordering of the dimensions in the inputs. channels_last corresponds to inputs with 
-    shape (batch_size, height, width, channels) while channels_first corresponds to inputs 
-    with shape (batch_size, channels, height, width).
-    """
-    def __init__(self, normalized_shape, eps=1e-6, data_format="channels_last"):
-        super().__init__()
-        self.weight = nn.Parameter(torch.ones(normalized_shape))
-        self.bias = nn.Parameter(torch.zeros(normalized_shape))
-        self.eps = eps
-        self.data_format = data_format
-        if self.data_format not in ["channels_last", "channels_first"]:
-            raise NotImplementedError 
-        self.normalized_shape = (normalized_shape, )
-    
-    def forward(self, x):
-        if self.data_format == "channels_last":
-            return F.layer_norm(x, self.normalized_shape, self.weight, self.bias, self.eps)
-        elif self.data_format == "channels_first":
-            u = x.mean(1, keepdim=True)
-            s = (x - u).pow(2).mean(1, keepdim=True)
-            x = (x - u) / torch.sqrt(s + self.eps)
-            x = self.weight[:, None, None] * x + self.bias[:, None, None]
-            return x
 
 @register_model
 def convnext_gcc_tiny(pretrained=False,in_22k=False, **kwargs):
