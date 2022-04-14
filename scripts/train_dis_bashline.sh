@@ -4,5 +4,5 @@ python -m torch.distributed.launch --nproc_per_node=1 ./main.py \
 --batch_size 1024 --lr 4e-3 --layer_decay 1.0 --update_freq 4 --epoch 300 \
 --model_ema true --model_ema_eval true \
 --data_path ~/data/imagenet \
---output_dir /checkpoint/yangtao/convnext/exp3 \
-> ./log/exp3.txt
+--output_dir /checkpoint/yangtao/convnext/exp_baseline \
+> ./log/exp_baseline.txt

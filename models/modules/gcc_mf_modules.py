@@ -1,34 +1,13 @@
-from turtle import forward
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from timm.models.layers import trunc_normal_, DropPath
 
-# channel wise attention
-class CA_layer(nn.Module):
-    def __init__(self, channel, reduction=16):
-        super(CA_layer, self).__init__()
-        # super().__init__()
-        # global average pooling
-        self.gap = nn.AdaptiveAvgPool2d(1)
-        self.fc = nn.Sequential(
-            nn.Conv2d(channel, channel//reduction, kernel_size=(1, 1), bias=False),
-            nn.BatchNorm2d(channel//reduction),
-            nn.Hardswish(),
-            nn.Conv2d(channel//reduction, channel, kernel_size=(1, 1), bias=False),
-            nn.BatchNorm2d(channel),
-            nn.Hardsigmoid()
-        )
 
-    def forward(self, x):
-        y = self.fc(self.gap(x))
-        return x*y.expand_as(x)
-
-class gcc_Block(nn.Module):
+# Meta-Former like Block
+class gcc_mf_Block(nn.Module):
     def __init__(self,
         dim,
-        drop_path=0.,
-        layer_scale_init_value=1e-6,
         # gcc options
         meta_kernel_size=16,
         instance_kernel_method=None,
@@ -39,7 +18,7 @@ class gcc_Block(nn.Module):
         ffn_dropout=0.0,
         dropout=0.1
         ):
-        super(gcc_Block, self).__init__()
+        super(gcc_mf_Block, self).__init__()
         # super().__init__()
         
         # record options
@@ -89,19 +68,20 @@ class gcc_Block(nn.Module):
             return  F.interpolate(self.meta_kernel_1_H, H_shape, mode='bilinear', align_corners=True), \
                     F.interpolate(self.meta_kernel_1_W, W_shape, mode='bilinear', align_corners=True), \
                     F.interpolate(self.meta_kernel_2_H, H_shape, mode='bilinear', align_corners=True), \
-                    F.interpolate(self.meta_kernel_2_W, W_shape, mode='bilinear', align_corners=True),
+                    F.interpolate(self.meta_kernel_2_W, W_shape, mode='bilinear', align_corners=True)
 
     def get_instance_pe(self, instance_kernel_size):
         if self.instance_kernel_method is None:
             return  self.meta_pe_1_H, self.meta_pe_1_W, self.meta_pe_2_H, self.meta_pe_2_W
         elif self.instance_kernel_method == 'interpolation_bilinear':
-            return  F.interpolate(self.meta_pe_1_H, [instance_kernel_size, 1], mode='bilinear', align_corners=True)\
+            H_shape, W_shape = [instance_kernel_size, 1], [1, instance_kernel_size]
+            return  F.interpolate(self.meta_pe_1_H, H_shape, mode='bilinear', align_corners=True)\
                         .expand(1, self.dim, instance_kernel_size, instance_kernel_size), \
-                    F.interpolate(self.meta_pe_1_W, [1, instance_kernel_size], mode='bilinear', align_corners=True)\
+                    F.interpolate(self.meta_pe_1_W, W_shape, mode='bilinear', align_corners=True)\
                         .expand(1, self.dim, instance_kernel_size, instance_kernel_size), \
-                    F.interpolate(self.meta_pe_2_H, [instance_kernel_size, 1], mode='bilinear', align_corners=True)\
+                    F.interpolate(self.meta_pe_2_H, H_shape, mode='bilinear', align_corners=True)\
                         .expand(1, self.dim, instance_kernel_size, instance_kernel_size), \
-                    F.interpolate(self.meta_pe_2_W, [1, instance_kernel_size], mode='bilinear', align_corners=True)\
+                    F.interpolate(self.meta_pe_2_W, W_shape, mode='bilinear', align_corners=True)\
                         .expand(1, self.dim, instance_kernel_size, instance_kernel_size)
 
     def forward(self, x):
@@ -146,6 +126,27 @@ class gcc_Block(nn.Module):
 
         return x_ffn
 
+# channel wise attention
+class CA_layer(nn.Module):
+    def __init__(self, channel, reduction=16):
+        super(CA_layer, self).__init__()
+        # super().__init__()
+        # global average pooling
+        self.gap = nn.AdaptiveAvgPool2d(1)
+        self.fc = nn.Sequential(
+            nn.Conv2d(channel, channel//reduction, kernel_size=(1, 1), bias=False),
+            nn.BatchNorm2d(channel//reduction),
+            nn.Hardswish(),
+            nn.Conv2d(channel//reduction, channel, kernel_size=(1, 1), bias=False),
+            nn.BatchNorm2d(channel),
+            nn.Hardsigmoid()
+        )
+
+    def forward(self, x):
+        y = self.fc(self.gap(x))
+        return x*y.expand_as(x)
+
+# Convnext Blocks (default weight init)
 class Block(nn.Module):
     def __init__(self, dim, drop_path=0., layer_scale_init_value=1e-6):
         super(Block, self).__init__()

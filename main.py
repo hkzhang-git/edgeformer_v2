@@ -31,7 +31,8 @@ from utils import NativeScalerWithGradNormCount as NativeScaler
 import utils
 import models.convnext
 import models.convnext_isotropic
-import models.convnext_gcc
+import models.convnext_gcc_mf
+import models.convnext_gcc_cvx
 
 def str2bool(v):
     """
