@@ -4,7 +4,8 @@ import torch.nn.functional as F
 from timm.models.layers import trunc_normal_, DropPath
 from timm.models.registry import register_model
 
-from .modules.gcc_cvx_lg_modules import gcc_cvx_lg_Block, Block, LayerNorm
+from .modules.gcc_cvx_lg_modules import gcc_cvx_lg_Block, Block, LayerNorm, gcc_Conv2d
+
 
 class ConvNeXt_cvx_lg_gcc(nn.Module):
     def __init__(self, in_chans=3, num_classes=1000, 
@@ -60,8 +61,8 @@ class ConvNeXt_cvx_lg_gcc(nn.Module):
         if isinstance(m, (nn.Conv2d, nn.Linear)):
             trunc_normal_(m.weight, std=.02)
             nn.init.constant_(m.bias, 0)
-        elif isinstance(m, gcc_cvx_lg_Block):
-            gcc_cvx_lg_Block.gcc_init()
+        elif isinstance(m, gcc_Conv2d):
+            gcc_Conv2d.gcc_init()
 
     def forward_features(self, x):
         for i in range(4):

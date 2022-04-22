@@ -52,7 +52,7 @@ class gcc_cvx_lg_Block(nn.Module):
         super().__init__()
         # super(gcc_cvx_lg_Block, self).__init__()
         # local part
-        self.dwconv = nn.Conv2d(dim//2, dim//2, kernel_size=7, padding=3, groups=dim) # depthwise conv
+        self.dwconv = nn.Conv2d(dim//2, dim//2, kernel_size=7, padding=3, groups=dim//2) # depthwise conv
         # global part
         self.gcc_conv_H = gcc_Conv2d(dim//4, type='H', meta_kernel_size=meta_kernel_size,
             instance_kernel_method=instance_kernel_method, use_pe=use_pe) 
