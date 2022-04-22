@@ -47,15 +47,17 @@ class gcc_Conv2d(nn.Module):
         x = F.conv2d(x_cat, weight=weight, bias=self.bias, padding=0, groups=self.dim)
         return x
 
-class gcc_cvx_Block(nn.Module):
+class gcc_cvx_lg_Block(nn.Module):
     def __init__(self, dim, drop_path=0., layer_scale_init_value=1e-6, meta_kernel_size=16, instance_kernel_method=None, use_pe=True):
         super().__init__()
-        # super(gcc_cvx_Block, self).__init__()
-        self.gcc_conv_H = gcc_Conv2d(dim//2, type='H', meta_kernel_size=meta_kernel_size,
+        # super(gcc_cvx_lg_Block, self).__init__()
+        # local part
+        self.dwconv = nn.Conv2d(dim//2, dim//2, kernel_size=7, padding=3, groups=dim) # depthwise conv
+        # global part
+        self.gcc_conv_H = gcc_Conv2d(dim//4, type='H', meta_kernel_size=meta_kernel_size,
             instance_kernel_method=instance_kernel_method, use_pe=use_pe) 
-        self.gcc_conv_W = gcc_Conv2d(dim//2, type='W', meta_kernel_size=meta_kernel_size,
+        self.gcc_conv_W = gcc_Conv2d(dim//4, type='W', meta_kernel_size=meta_kernel_size,
             instance_kernel_method=instance_kernel_method, use_pe=use_pe)
-        # self.dwconv = nn.Conv2d(dim, dim, kernel_size=7, padding=3, groups=dim) # depthwise conv
         self.norm = LayerNorm(dim, eps=1e-6)
         self.pwconv1 = nn.Linear(dim, 4 * dim) # pointwise/1x1 convs, implemented with linear layers
         self.act = nn.GELU()
@@ -66,9 +68,15 @@ class gcc_cvx_Block(nn.Module):
 
     def forward(self, x):
         input = x
-        x_1, x_2 = torch.chunk(x, 2, 1)
+        x_global, x_local = torch.chunk(x, 2, 1)
+        # local part
+        x_local = self.dwconv(x_local)
+        # global part
+        x_1, x_2 = torch.chunk(x_global, 2, 1)
         x_1, x_2 = self.gcc_conv_H(x_1), self.gcc_conv_W(x_2)
         x = torch.cat((x_1, x_2), dim=1)
+        # global & local fusion
+        x = torch.cat((x_global, x_local), dim=1)
         x = x.permute(0, 2, 3, 1) # (N, C, H, W) -> (N, H, W, C)
         x = self.norm(x)
         x = self.pwconv1(x)

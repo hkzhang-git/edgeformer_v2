@@ -4,15 +4,15 @@ import torch.nn.functional as F
 from timm.models.layers import trunc_normal_, DropPath
 from timm.models.registry import register_model
 
-from .modules.gcc_cvx_modules import gcc_cvx_Block, Block, LayerNorm
+from .modules.gcc_cvx_lg_modules import gcc_cvx_lg_Block, Block, LayerNorm
 
-class ConvNeXt_cvx_gcc(nn.Module):
+class ConvNeXt_cvx_lg_gcc(nn.Module):
     def __init__(self, in_chans=3, num_classes=1000, 
                  depths=[3, 3, 9, 3], dims=[96, 192, 384, 768], drop_path_rate=0., 
                  layer_scale_init_value=1e-6, head_init_scale=1.,
                  ):
         super().__init__()
-        # super(ConvNeXt_cvx_gcc, self).__init__()
+        # super(ConvNeXt_cvx_lg_gcc, self).__init__()
 
         self.downsample_layers = nn.ModuleList() # stem and 3 intermediate downsampling conv layers
         stem = nn.Sequential(
@@ -39,7 +39,7 @@ class ConvNeXt_cvx_gcc(nn.Module):
             else:       # for stage 2 and 3, gcc modules is used
                 stages_fs = [None, None, 14, 7]
                 stage = nn.Sequential(*[
-                    gcc_cvx_Block(dim=dims[i], drop_path=dp_rates[cur + j], layer_scale_init_value=layer_scale_init_value,
+                    gcc_cvx_lg_Block(dim=dims[i], drop_path=dp_rates[cur + j], layer_scale_init_value=layer_scale_init_value,
                         meta_kernel_size=stages_fs[i], instance_kernel_method=None, use_pe=True) \
                     # if depths[i]//3 < j+1 <= 2*depths[i]//3 else \
                     if 2*depths[i]//3 < j+1 else \
@@ -60,8 +60,8 @@ class ConvNeXt_cvx_gcc(nn.Module):
         if isinstance(m, (nn.Conv2d, nn.Linear)):
             trunc_normal_(m.weight, std=.02)
             nn.init.constant_(m.bias, 0)
-        elif isinstance(m, gcc_cvx_Block):
-            gcc_cvx_Block.gcc_init()
+        elif isinstance(m, gcc_cvx_lg_Block):
+            gcc_cvx_lg_Block.gcc_init()
 
     def forward_features(self, x):
         for i in range(4):
@@ -75,38 +75,38 @@ class ConvNeXt_cvx_gcc(nn.Module):
         return x
 
 @register_model
-def convnext_gcc_cvx_tiny(pretrained=False,in_22k=False, **kwargs):
-    # model = ConvNeXt_cvx_gcc(depths=[3, 3, 9, 3], dims=[96, 192, 384, 768], **kwargs)
-    model = ConvNeXt_cvx_gcc(depths=[3, 3, 9, 3], dims=[48, 96, 192, 384], **kwargs)
-    # model = ConvNeXt_cvx_gcc(depths=[3, 3, 9, 3], dims=[24, 48, 96, 192], **kwargs)
+def convnext_gcc_cvx_lg_tiny(pretrained=False,in_22k=False, **kwargs):
+    # model = ConvNeXt_cvx_lg_gcc(depths=[3, 3, 9, 3], dims=[96, 192, 384, 768], **kwargs)
+    model = ConvNeXt_cvx_lg_gcc(depths=[3, 3, 9, 3], dims=[48, 96, 192, 384], **kwargs)
+    # model = ConvNeXt_cvx_lg_gcc(depths=[3, 3, 9, 3], dims=[24, 48, 96, 192], **kwargs)
     if pretrained or in_22k:
         raise AttributeError("no pretrained model")
     return model
 
 @register_model
-def convnext_gcc_cvx_small(pretrained=False,in_22k=False, **kwargs):
-    model = ConvNeXt_cvx_gcc(depths=[3, 3, 27, 3], dims=[96, 192, 384, 768], **kwargs)
+def convnext_gcc_cvx_lg_small(pretrained=False,in_22k=False, **kwargs):
+    model = ConvNeXt_cvx_lg_gcc(depths=[3, 3, 27, 3], dims=[96, 192, 384, 768], **kwargs)
     if pretrained or in_22k:
         raise AttributeError("no pretrained model")
     return model
 
 @register_model
-def convnext_gcc_cvx_base(pretrained=False, in_22k=False, **kwargs):
-    model = ConvNeXt_cvx_gcc(depths=[3, 3, 27, 3], dims=[128, 256, 512, 1024], **kwargs)
+def convnext_gcc_cvx_lg_base(pretrained=False, in_22k=False, **kwargs):
+    model = ConvNeXt_cvx_lg_gcc(depths=[3, 3, 27, 3], dims=[128, 256, 512, 1024], **kwargs)
     if pretrained or in_22k:
         raise AttributeError("no pretrained model")
     return model
 
 @register_model
-def convnext_gcc_cvx_large(pretrained=False, in_22k=False, **kwargs):
-    model = ConvNeXt_cvx_gcc(depths=[3, 3, 27, 3], dims=[192, 384, 768, 1536], **kwargs)
+def convnext_gcc_cvx_lg_large(pretrained=False, in_22k=False, **kwargs):
+    model = ConvNeXt_cvx_lg_gcc(depths=[3, 3, 27, 3], dims=[192, 384, 768, 1536], **kwargs)
     if pretrained or in_22k:
         raise AttributeError("no pretrained model")
     return model
 
 @register_model
-def convnext_gcc_cvx_xlarge(pretrained=False, in_22k=False, **kwargs):
-    model = ConvNeXt_cvx_gcc(depths=[3, 3, 27, 3], dims=[256, 512, 1024, 2048], **kwargs)
+def convnext_gcc_cvx_lg_xlarge(pretrained=False, in_22k=False, **kwargs):
+    model = ConvNeXt_cvx_lg_gcc(depths=[3, 3, 27, 3], dims=[256, 512, 1024, 2048], **kwargs)
     if pretrained or in_22k:
         raise AttributeError("no pretrained model")
     return model

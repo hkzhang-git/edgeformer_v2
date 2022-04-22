@@ -33,6 +33,8 @@ import models.convnext
 import models.convnext_isotropic
 import models.convnext_gcc_mf
 import models.convnext_gcc_cvx
+import models.convnext_gcc_mf_lg
+import models.convnext_gcc_cvx_lg
 
 def str2bool(v):
     """
