@@ -21,7 +21,7 @@ class gcc_mf_lg_Block(nn.Module):
         super(gcc_mf_lg_Block, self).__init__()
         # super().__init__()
         
-        raise AttributeError("not implemented yet!!")
+        raise NotImplementedError("not implemented yet!!")
 
         # record options
         self.global_dim, self.local_dim = dim//2 # global_dim=fs/4

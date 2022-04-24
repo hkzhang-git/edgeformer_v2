@@ -30,6 +30,7 @@ class ConvNeXt_mf_gcc(nn.Module):
         self.stages = nn.ModuleList() # 4 feature resolution stages, each consisting of multiple residual blocks
         dp_rates=[x.item() for x in torch.linspace(0, drop_path_rate, sum(depths))] 
         cur = 0
+        stages_fs = [56, 28, 14, 7]
         for i in range(4):
             if i < 2:   # for stage 0 and 1, no gcc
                 stage = nn.Sequential(*[
@@ -37,7 +38,6 @@ class ConvNeXt_mf_gcc(nn.Module):
                     for j in range(depths[i])
                 ])
             else:       # for stage 2 and 3, gcc modules is used
-                stages_fs = [None, None, 14, 7]
                 stage = nn.Sequential(*[
                     # using static global kernel
                     gcc_mf_Block(dim=dims[i]//2, instance_kernel_method=None, meta_kernel_size=stages_fs[i], 
@@ -74,33 +74,33 @@ def convnext_gcc_mf_tiny(pretrained=False,in_22k=False, **kwargs):
     model = ConvNeXt_mf_gcc(depths=[3, 3, 9, 3], dims=[48, 96, 192, 384], **kwargs)
     # model = ConvNeXt_mf_gcc(depths=[3, 3, 9, 3], dims=[24, 48, 96, 192], **kwargs)
     if pretrained or in_22k:
-        raise AttributeError("no pretrained model")
+        raise NotImplementedError("no pretrained model")
     return model
 
 @register_model
 def convnext_gcc_mf_small(pretrained=False,in_22k=False, **kwargs):
     model = ConvNeXt_mf_gcc(depths=[3, 3, 27, 3], dims=[96, 192, 384, 768], **kwargs)
     if pretrained or in_22k:
-        raise AttributeError("no pretrained model")
+        raise NotImplementedError("no pretrained model")
     return model
 
 @register_model
 def convnext_gcc_mf_base(pretrained=False, in_22k=False, **kwargs):
     model = ConvNeXt_mf_gcc(depths=[3, 3, 27, 3], dims=[128, 256, 512, 1024], **kwargs)
     if pretrained or in_22k:
-        raise AttributeError("no pretrained model")
+        raise NotImplementedError("no pretrained model")
     return model
 
 @register_model
 def convnext_gcc_mf_large(pretrained=False, in_22k=False, **kwargs):
     model = ConvNeXt_mf_gcc(depths=[3, 3, 27, 3], dims=[192, 384, 768, 1536], **kwargs)
     if pretrained or in_22k:
-        raise AttributeError("no pretrained model")
+        raise NotImplementedError("no pretrained model")
     return model
 
 @register_model
 def convnext_gcc_mf_xlarge(pretrained=False, in_22k=False, **kwargs):
     model = ConvNeXt_mf_gcc(depths=[3, 3, 27, 3], dims=[256, 512, 1024, 2048], **kwargs)
     if pretrained or in_22k:
-        raise AttributeError("no pretrained model")
+        raise NotImplementedError("no pretrained model")
     return model

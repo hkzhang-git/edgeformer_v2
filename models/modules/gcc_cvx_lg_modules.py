@@ -19,6 +19,7 @@ class gcc_Conv2d(nn.Module):
 
     def gcc_init(self):
         trunc_normal_(self.weight, std=.02)
+        # trunc_normal_(self.meta_pe, std=.02)
         nn.init.constant_(self.bias, 0)
 
     def get_instance_kernel(self, instance_kernel_size):
