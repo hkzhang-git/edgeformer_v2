@@ -37,7 +37,7 @@ class gcc_Conv2d(nn.Module):
         elif self.instance_kernel_method == 'interpolation_bilinear':
             instance_kernel_size_2 =  (instance_kernel_size, 1) if self.type=='H' else (1, instance_kernel_size)
             return  F.interpolate(self.meta_pe, instance_kernel_size_2, mode='bilinear', align_corners=True)\
-                        .expand(1, self.dim, instance_kernel_size, instance_kernel_size), \
+                        .expand(1, self.dim, instance_kernel_size, instance_kernel_size)
 
     def forward(self, x):
         _, _, f_s, _ = x.shape
@@ -75,7 +75,7 @@ class gcc_cvx_lg_Block(nn.Module):
         # global part
         x_1, x_2 = torch.chunk(x_global, 2, 1)
         x_1, x_2 = self.gcc_conv_H(x_1), self.gcc_conv_W(x_2)
-        x = torch.cat((x_1, x_2), dim=1)
+        x_global = torch.cat((x_1, x_2), dim=1)
         # global & local fusion
         x = torch.cat((x_global, x_local), dim=1)
         x = x.permute(0, 2, 3, 1) # (N, C, H, W) -> (N, H, W, C)
