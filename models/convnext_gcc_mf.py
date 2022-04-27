@@ -69,16 +69,21 @@ class ConvNeXt_mf_gcc(nn.Module):
         return x
 
 @register_model
-def convnext_gcc_mf_tiny(pretrained=False,in_22k=False, **kwargs):
-    # model = ConvNeXt_mf_gcc(depths=[3, 3, 9, 3], dims=[96, 192, 384, 768], **kwargs)
+def convnext_gcc_mf_tt(pretrained=False, in_22k=False, **kwargs):
     model = ConvNeXt_mf_gcc(depths=[3, 3, 9, 3], dims=[48, 96, 192, 384], **kwargs)
-    # model = ConvNeXt_mf_gcc(depths=[3, 3, 9, 3], dims=[24, 48, 96, 192], **kwargs)
     if pretrained or in_22k:
         raise NotImplementedError("no pretrained model")
     return model
 
 @register_model
-def convnext_gcc_mf_small(pretrained=False,in_22k=False, **kwargs):
+def convnext_gcc_mf_tiny(pretrained=False, in_22k=False, **kwargs):
+    model = ConvNeXt_mf_gcc(depths=[3, 3, 9, 3], dims=[96, 192, 384, 768], **kwargs)
+    if pretrained or in_22k:
+        raise NotImplementedError("no pretrained model")
+    return model
+
+@register_model
+def convnext_gcc_mf_small(pretrained=False, in_22k=False, **kwargs):
     model = ConvNeXt_mf_gcc(depths=[3, 3, 27, 3], dims=[96, 192, 384, 768], **kwargs)
     if pretrained or in_22k:
         raise NotImplementedError("no pretrained model")
