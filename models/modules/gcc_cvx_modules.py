@@ -50,7 +50,14 @@ class gcc_Conv2d(nn.Module):
         return x
 
 class gcc_cvx_Block(nn.Module):
-    def __init__(self, dim, drop_path=0., layer_scale_init_value=1e-6, meta_kernel_size=16, instance_kernel_method=None, use_pe=True):
+    def __init__(self,
+        dim,
+        drop_path=0.,
+        layer_scale_init_value=1e-6,
+        meta_kernel_size=16,
+        instance_kernel_method=None,
+        use_pe=True
+    ):
         super().__init__()
         # super(gcc_cvx_Block, self).__init__()
         # branch1
@@ -86,7 +93,15 @@ class gcc_cvx_Block(nn.Module):
         return x
 
 class gcc_cvx_Block_2stage(nn.Module):
-    def __init__(self, dim, drop_path=0., layer_scale_init_value=1e-6, meta_kernel_size=16, instance_kernel_method=None, use_pe=True):
+    def __init__(
+        self,
+        dim,
+        drop_path=0.,
+        layer_scale_init_value=1e-6,
+        meta_kernel_size=16,
+        instance_kernel_method=None,
+        use_pe=True
+    ):
         super().__init__()
         # super(gcc_cvx_Block_2stage, self).__init__()
         # branch1   ..->H->W->..
@@ -110,13 +125,13 @@ class gcc_cvx_Block_2stage(nn.Module):
 
     def forward(self, x):
         input = x
-        x_1, x_2 = torch.chunk(x, 2, 1)
+        x_1, x_2 = torch.chunk(x, 2, dim=1)
         # branch1   ..->H->W->..
-        x_1 = self.gcc_conv_H1(x_1)
-        x_1 = self.gcc_conv_W1(x_1)
+        x_1 = self.gcc_conv_1H(x_1)
+        x_1 = self.gcc_conv_1W(x_1)
         # branch2   ..->W->H->..
-        x_2 = self.gcc_conv_W2(x_2)
-        x_2 = self.gcc_conv_H2(x_2)
+        x_2 = self.gcc_conv_2W(x_2)
+        x_2 = self.gcc_conv_2H(x_2)
         x = torch.cat((x_1, x_2), dim=1)
         x = x.permute(0, 2, 3, 1) # (N, C, H, W) -> (N, H, W, C)
         x = self.norm(x)
