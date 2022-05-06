@@ -10,7 +10,7 @@ class ConvNeXt_cvx_lg_gcc(nn.Module):
     def __init__(self, in_chans=3, num_classes=1000, 
                  depths=[3, 3, 9, 3], dims=[96, 192, 384, 768], drop_path_rate=0., 
                  layer_scale_init_value=1e-6, head_init_scale=1.,
-                 gcc_stage=2
+                 gcc_stage=1
                  ):
         super().__init__()
         # super(ConvNeXt_cvx_lg_gcc, self).__init__()

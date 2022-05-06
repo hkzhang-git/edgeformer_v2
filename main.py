@@ -35,6 +35,7 @@ import models.convnext_gcc_mf
 import models.convnext_gcc_cvx
 import models.convnext_gcc_mf_lg
 import models.convnext_gcc_cvx_lg
+import models.convnext_gcc_cvx_lg_res
 
 def str2bool(v):
     """

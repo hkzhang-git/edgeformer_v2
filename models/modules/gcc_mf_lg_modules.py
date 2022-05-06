@@ -16,37 +16,39 @@ class gcc_mf_lg_Block(nn.Module):
         bias=True,
         ffn_dim=2,
         ffn_dropout=0.0,
-        dropout=0.1
+        dropout=0.1,
+        local_kernel_size=7
         ):
         super(gcc_mf_lg_Block, self).__init__()
         # super().__init__()
         
-        raise NotImplementedError("not implemented yet!!")
-
         # record options
-        self.global_dim, self.local_dim = dim//2 # global_dim=fs/4
+        self.global_dim, self.local_dim = dim//2, dim    # global_dim=dim/2=fs/4, local_dim=dim=fs/2, dim=fs/2
         self.instance_kernel_method = instance_kernel_method
         self.use_pe = use_pe
         self.mid_mix = mid_mix
 
         # spatial part
+        self.dwconv = nn.Conv2d(self.local_dim, self.local_dim, kernel_size=local_kernel_size, padding=3, groups=self.local_dim) # depthwise conv
+        self.local_norm = nn.BatchNorm2d(num_features=self.local_dim)
+
         self.pre_Norm_1 = nn.BatchNorm2d(num_features=self.global_dim)
         self.pre_Norm_2 = nn.BatchNorm2d(num_features=self.global_dim)
 
-        self.meta_kernel_1_H = nn.Conv2d(dim, dim, (meta_kernel_size, 1), groups=dim).weight
-        self.meta_kernel_1_W = nn.Conv2d(dim, dim, (1, meta_kernel_size), groups=dim).weight
-        self.meta_kernel_2_H = nn.Conv2d(dim, dim, (meta_kernel_size, 1), groups=dim).weight
-        self.meta_kernel_2_W = nn.Conv2d(dim, dim, (1, meta_kernel_size), groups=dim).weight
+        self.meta_kernel_1_H = nn.Conv2d(self.global_dim, self.global_dim, (meta_kernel_size, 1), groups=self.global_dim).weight
+        self.meta_kernel_1_W = nn.Conv2d(self.global_dim, self.global_dim, (1, meta_kernel_size), groups=self.global_dim).weight
+        self.meta_kernel_2_H = nn.Conv2d(self.global_dim, self.global_dim, (meta_kernel_size, 1), groups=self.global_dim).weight
+        self.meta_kernel_2_W = nn.Conv2d(self.global_dim, self.global_dim, (1, meta_kernel_size), groups=self.global_dim).weight
 
-        self.meta_1_H_bias = nn.Parameter(torch.randn(dim)) if bias else None
-        self.meta_1_W_bias = nn.Parameter(torch.randn(dim)) if bias else None
-        self.meta_2_H_bias = nn.Parameter(torch.randn(dim)) if bias else None
-        self.meta_2_W_bias = nn.Parameter(torch.randn(dim)) if bias else None
+        self.meta_1_H_bias = nn.Parameter(torch.randn(self.global_dim)) if bias else None
+        self.meta_1_W_bias = nn.Parameter(torch.randn(self.global_dim)) if bias else None
+        self.meta_2_H_bias = nn.Parameter(torch.randn(self.global_dim)) if bias else None
+        self.meta_2_W_bias = nn.Parameter(torch.randn(self.global_dim)) if bias else None
 
-        self.meta_pe_1_H = nn.Parameter(torch.randn(1, dim, meta_kernel_size, 1)) if use_pe else None
-        self.meta_pe_1_W = nn.Parameter(torch.randn(1, dim, 1, meta_kernel_size)) if use_pe else None
-        self.meta_pe_2_H = nn.Parameter(torch.randn(1, dim, meta_kernel_size, 1)) if use_pe else None
-        self.meta_pe_2_W = nn.Parameter(torch.randn(1, dim, 1, meta_kernel_size)) if use_pe else None
+        self.meta_pe_1_H = nn.Parameter(torch.randn(1, self.global_dim, meta_kernel_size, 1)) if use_pe else None
+        self.meta_pe_1_W = nn.Parameter(torch.randn(1, self.global_dim, 1, meta_kernel_size)) if use_pe else None
+        self.meta_pe_2_H = nn.Parameter(torch.randn(1, self.global_dim, meta_kernel_size, 1)) if use_pe else None
+        self.meta_pe_2_W = nn.Parameter(torch.randn(1, self.global_dim, 1, meta_kernel_size)) if use_pe else None
 
         self.mixer = nn.ChannelShuffle(groups=2) if mid_mix else None
 
@@ -89,7 +91,10 @@ class gcc_mf_lg_Block(nn.Module):
     def forward(self, x):
         x_global, x_local = torch.chunk(x, 2, 1)
         # local
-        x_local
+        x_local_res = x_local
+        x_local = self.local_norm(x_local)
+        x_local = self.dwconv(x_local)
+        x_local = x_local + x_local_res
         # global
         x_1, x_2 = torch.chunk(x_global, 2, 1)
         x_1_res, x_2_res = x_1, x_2
@@ -127,7 +132,9 @@ class gcc_mf_lg_Block(nn.Module):
         x_1, x_2 = x_1_res + x_1_2, x_2_res + x_2_2
 
         # =====================Channel Part========================
-        x_ffn = torch.cat((x_1, x_2), dim=1)
+
+        x_global = torch.cat((x_1, x_2), dim=1)
+        x_ffn = torch.cat((x_global, x_local), dim=1)
         x_ffn = x_ffn + self.ca(self.ffn(x_ffn))
 
         return x_ffn

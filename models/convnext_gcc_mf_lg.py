@@ -41,7 +41,8 @@ class ConvNeXt_mf_lg_gcc(nn.Module):
                 stage = nn.Sequential(*[
                     # using static global kernel
                     gcc_mf_lg_Block(dim=dims[i]//2, instance_kernel_method=None, meta_kernel_size=stages_fs[i], 
-                        use_pe=True, mid_mix=False, bias=True, ffn_dim=dims[i], ffn_dropout=0.0, dropout=0.1)
+                        # use_pe=True, mid_mix=False, bias=True, ffn_dim=dims[i]//4, ffn_dropout=0.0, dropout=0.1)
+                        use_pe=True, mid_mix=False, bias=True, ffn_dim=dims[i]//4, ffn_dropout=0.0, dropout=dp_rates[cur + j])
                     # if depths[i]//3 < j+1 <= 2*depths[i]//3 else \
                     if 2*depths[i]//3 < j+1 else \
                     Block(dim=dims[i], drop_path=dp_rates[cur + j], layer_scale_init_value=layer_scale_init_value) \
@@ -68,11 +69,17 @@ class ConvNeXt_mf_lg_gcc(nn.Module):
         x = self.head(x)
         return x
 
+
+@register_model
+def convnext_gcc_mf_lg_tt(pretrained=False,in_22k=False, **kwargs):
+    model = ConvNeXt_mf_lg_gcc(depths=[3, 3, 9, 3], dims=[48, 96, 192, 384], **kwargs)
+    if pretrained or in_22k:
+        raise NotImplementedError("no pretrained model")
+    return model
+
 @register_model
 def convnext_gcc_mf_lg_tiny(pretrained=False,in_22k=False, **kwargs):
-    # model = ConvNeXt_mf_lg_gcc(depths=[3, 3, 9, 3], dims=[96, 192, 384, 768], **kwargs)
-    model = ConvNeXt_mf_lg_gcc(depths=[3, 3, 9, 3], dims=[48, 96, 192, 384], **kwargs)
-    # model = ConvNeXt_mf_lg_gcc(depths=[3, 3, 9, 3], dims=[24, 48, 96, 192], **kwargs)
+    model = ConvNeXt_mf_lg_gcc(depths=[3, 3, 9, 3], dims=[96, 192, 384, 768], **kwargs)
     if pretrained or in_22k:
         raise NotImplementedError("no pretrained model")
     return model

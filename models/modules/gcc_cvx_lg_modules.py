@@ -161,6 +161,77 @@ class gcc_cvx_lg_Block_2stage(nn.Module):
         x = input + self.drop_path(x)
         return x
 
+class gcc_cvx_lg_Block_2stage_res(nn.Module):
+    def __init__(self,
+        dim,
+        drop_path=0.,
+        layer_scale_init_value=1e-6,
+        meta_kernel_size=16,
+        local_kernel_size=7,
+        instance_kernel_method=None,
+        use_pe=True
+    ):
+        super().__init__()
+        # super(gcc_cvx_lg_Block_2stage_res, self).__init__()
+
+        # Token Mixer
+        self.use_pe = use_pe
+        self.pe = nn.Parameter(torch.randn(1, dim, meta_kernel_size, meta_kernel_size)) if use_pe else None
+        # local part
+        self.dwconv = nn.Conv2d(dim//2, dim//2, kernel_size=local_kernel_size, padding=3, groups=dim//2) # depthwise conv
+        # global part
+        # branch1   ..->H->W->..
+        self.gcc_conv_1H = gcc_Conv2d(dim//2, type='H', meta_kernel_size=meta_kernel_size,
+            # instance_kernel_method=instance_kernel_method, use_pe=use_pe) 
+            instance_kernel_method=instance_kernel_method, use_pe=False) 
+        self.gcc_conv_1W = gcc_Conv2d(dim//2, type='W', meta_kernel_size=meta_kernel_size,
+            # instance_kernel_method=instance_kernel_method, use_pe=use_pe)
+            instance_kernel_method=instance_kernel_method, use_pe=False)
+
+        # Channel Mixer
+        self.norm = LayerNorm(dim, eps=1e-6)
+        self.pwconv1 = nn.Linear(dim, 4 * dim) # pointwise/1x1 convs, implemented with linear layers
+        self.act = nn.GELU()
+        self.pwconv2 = nn.Linear(4 * dim, dim)
+
+        # Others
+        self.gamma_t = nn.Parameter(layer_scale_init_value * torch.ones((dim)), 
+                                    requires_grad=True) if layer_scale_init_value > 0 else None
+        self.gamma_c = nn.Parameter(layer_scale_init_value * torch.ones((dim)), 
+                                    requires_grad=True) if layer_scale_init_value > 0 else None
+        self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()
+
+    def forward(self, x):
+        # Token Mixer
+        input = x
+        if self.use_pe:
+            x = x + self.pe
+        x_global, x_local = torch.chunk(x, 2, dim=1)
+        # local part
+        x_local = self.dwconv(x_local)
+        # global part
+        # branch1   ..->H->W->..
+        x_global = self.gcc_conv_1H(x_global)
+        x_global = self.gcc_conv_1W(x_global)
+        # global & local fusion
+        x = torch.cat((x_global, x_local), dim=1)
+        if self.gamma_t is not None: # (N, C, H, W) * (C, 1, 1)
+            x = self.gamma_t.unsqueeze(-1).unsqueeze(-1) * x
+        x = input + self.drop_path(x)
+        
+        # Channel Mixer
+        input = x
+        x = x.permute(0, 2, 3, 1) # (N, C, H, W) -> (N, H, W, C)
+        x = self.norm(x)
+        x = self.pwconv1(x)
+        x = self.act(x)
+        x = self.pwconv2(x)
+        if self.gamma_c is not None:
+            x = self.gamma_c * x
+        x = x.permute(0, 3, 1, 2) # (N, H, W, C) -> (N, C, H, W)
+        x = input + self.drop_path(x)
+        return x
+
 class Block(nn.Module):
     def __init__(self, dim, drop_path=0., layer_scale_init_value=1e-6):
         super().__init__()
